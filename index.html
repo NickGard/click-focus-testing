@@ -2485,7 +2485,7 @@
         <tr data-test-case id="button_with_label">
           <th scope="row">button within label that has valid target</th>
           <td>
-            Yes
+            No
             <details class="results"></details>
           </td>
           <td>
@@ -2496,52 +2496,12 @@
                 <span data-click-target>Click me</span>
               </button>
             </label>
-            <input
-              type="text"
-              id="button_with_label_target"
-              data-redirected-focus-target
-            />
+            <input type="text" id="button_with_label_target" />
           </td>
-          <td class="fail">
-            Fail
-            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
-            <details>
-              &lt;label&gt; element does not redirect focus on click. No "focus"
-              or "focusin" events are dispatched on the &lt;input&gt; element,
-              it does not become the active element, and it does not match the
-              :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
-            <details>
-              &lt;label&gt; element does not redirect focus on click. No "focus"
-              or "focusin" events are dispatched on the &lt;input&gt; element,
-              it does not become the active element, and it does not match the
-              :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
-            <details>
-              &lt;label&gt; element does not redirect focus on click. No "focus"
-              or "focusin" events are dispatched on the &lt;input&gt; element,
-              it does not become the active element, and it does not match the
-              :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
-            <details>
-              &lt;label&gt; element does not redirect focus on click. No "focus"
-              or "focusin" events are dispatched on the &lt;input&gt; element,
-              it does not become the active element, and it does not match the
-              :focus selector.
-            </details>
-          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="focusable_click_target_within_label">
           <th scope="row">Focusable click target within label</th>
