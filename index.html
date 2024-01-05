@@ -1,0 +1,3469 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Click focus testing</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      * {
+        font-family: monospace;
+      }
+      :focus {
+        outline: 3px solid green;
+        outline-offset: 2px;
+      }
+
+      [data-test-case].fail > td:nth-child(2),
+      tr:not([data-test-case]).fail > td,
+      td.fail {
+        background-color: red;
+        color: white;
+      }
+      [data-test-case].pass > td:nth-child(2),
+      tr:not([data-test-case]).pass > td,
+      td.pass {
+        background-color: green;
+        color: white;
+      }
+      [data-test-case].partial > td:nth-child(2),
+      tr:not([data-test-case]).partial > td,
+      td.partial {
+        background-color: yellow;
+        color: black;
+      }
+      th[colspan] {
+        background-color: #888;
+        color: #eee;
+      }
+
+      table {
+        background-color: white;
+        color: black;
+        border-collapse: collapse;
+      }
+
+      /* hide unsupported tests */
+      @supports not (content-visibility: hidden) {
+        #unrendered_input_wrapped_by_label,
+        #unrendered_input_targeted_by_label {
+          position: relative;
+        }
+        #unrendered_input_wrapped_by_label:after,
+        #unrendered_input_targeted_by_label:after {
+          content: "property not supported in this browser";
+          position: absolute;
+          padding: 0.25em;
+          background-color: red;
+          color: white;
+          left: 0;
+        }
+      }
+    </style>
+    <script>
+      (function () {
+        var capturedEvents = [];
+        var capturing = false;
+
+        function captureEvent(e) {
+          if (capturing) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            capturedEvents.unshift(e);
+          }
+        }
+
+        var formElements = ["button", "input", "select", "textarea"].join(", ");
+        var focusableNonFormElements = [
+          "a[href]",
+          "audio",
+          "video[controls]",
+          "[tabindex]", // tabindex value doesn't matter for click focusability
+          "details summary",
+          '[contenteditable]:not([contenteditable="false"])',
+        ].join(", ");
+        var focusableElements = [formElements, focusableNonFormElements].join(
+          ", "
+        );
+
+        /**
+         * Gets the target element, even if it is in a shadow DOM
+         */
+        function getEventTarget(event) {
+          return event.composedPath()[0] || event.target;
+        }
+
+        /**
+         * Labels delegate focus to form elements in two ways:
+         * 1. Via a "for" attribute (or "htmlFor" property on the Element API)
+         * 2. Via wrapping the element
+         *
+         * Note:
+         * If a "for" attribute exists, all wrapped form elements are ignored, _even if_
+         * the attribute is empty or does not reference a form element.
+         *
+         * Note:
+         * If multiple form elements are wrapped by the label or multiple form elements have
+         * the same id matching the "for" attribute, only the first (in DOM order) is considered
+         * the delegated element, _even if_ it is disabled, hidden, or inert.
+         */
+        function getLabelledElement(element) {
+          var forId = element.htmlFor;
+          var referencedFormEl;
+
+          try {
+            referencedFormEl = document.querySelector(
+              `#${forId}:is(${formElements})`
+            );
+          } catch (e) {}
+
+          return forId ? referencedFormEl : element.querySelector(formElements);
+        }
+
+        /**
+         * "being rendered" is a term of art in [WHATWG](https://html.spec.whatwg.org/multipage/rendering.html#being-rendered).
+         * An element is "being rendered" _unless_ it or an ancestor has:
+         * 1. display: none
+         * 2. content-visibility: hidden
+         * 3. visibility: hidden
+         *
+         * Note:
+         * There was some debate whether an element with "display: contents" meant that it was being rendered,
+         * but the issue was resolved in this (CSSWG thread](https://github.com/w3c/csswg-drafts/issues/2632)
+         */
+        function isBeingRendered(element) {
+          var el = element;
+          while (el) {
+            if (
+              el.style.display === "none" ||
+              el.style.contentVisibility === "hidden" ||
+              el.style.visibility === "hidden"
+            ) {
+              return false;
+            }
+            el = el.parentElement;
+          }
+          return true;
+        }
+
+        /**
+         * An element may be unfocusable due to:
+         * 1. Being disabled (usually via "disabled" attribute), but only if the element is a form element
+         * 2. Being contained by a fieldset that is disabled, but only if the element is a form element
+         * 3. The element or an ancestor is inert
+         * 4. The element or an ancestor is not "being rendered"
+         */
+        function isUnfocusable(element) {
+          var isDisabled =
+            element.matches(formElements) &&
+            (element.disabled || element.closest("fieldset:disabled")); // 1, 2
+          var isInert = element.closest("[inert]"); // 3
+          var isHidden = !isBeingRendered(element); // 4
+
+          return isDisabled || isInert || isHidden;
+        }
+
+        /**
+         * Elements in an open shadow DOM that delegates focus (created with
+         * Element.attachShadow({open: true, delegatesFocus: true})) will delegate focus to the first
+         * focusable element in the shadow DOM _unless_ the element itself is focusable. In that case,
+         * the original element retains focus.
+         */
+        function getDelegatedFocusElement(element) {
+          var el = element;
+          while (el) {
+            if (el.shadowRoot && el.shadowRoot.delegatesFocus) {
+              var delegatedFocusElement =
+                el.shadowRoot.querySelector(focusableElements);
+
+              return delegatedFocusElement &&
+                !isUnfocusable(delegatedFocusElement)
+                ? delegatedFocusElement
+                : null;
+            }
+            el = el.parentElement;
+          }
+          return null;
+        }
+
+        function getFocusableElement(e) {
+          var targetElement = getEventTarget(e);
+          var validTargetElements = ["label", focusableElements].join(", ");
+          var focusableElement = targetElement.closest(validTargetElements);
+
+          if (focusableElement?.tagName === "LABEL") {
+            // get the element that the label points to
+            var labelledElement = getLabelledElement(focusableElement);
+            if (labelledElement && !isUnfocusable(labelledElement)) {
+              focusableElement = labelledElement;
+            }
+          }
+
+          return focusableElement && !isUnfocusable(focusableElement)
+            ? focusableElement
+            : getDelegatedFocusElement(targetElement);
+        }
+
+        function handler(e) {
+          var focusableElement = getFocusableElement(e);
+
+          if (focusableElement) {
+            if (focusableElement === document.activeElement) {
+              // mousedown is happening on the currently focused element
+              // do not fire the 'focus' event in this case AND
+              // call preventDefault() to stop the browser from transferring
+              // focus to the body element
+              e.preventDefault();
+            } else {
+              // start capturing possible out-of-order mouse events
+              capturing = true;
+
+              /*
+               * enqueue the focus event _after_ the current batch of events, which
+               * includes any blur events but before the mouseup and click events.
+               * The correct order of events is:
+               *
+               * [this element] MOUSEDOWN               <-- this event
+               * [previously active element] BLUR
+               * [previously active element] FOCUSOUT
+               * [this element] FOCUS                   <-- forced event
+               * [this element] FOCUSIN                 <-- triggered by forced event
+               * [this element] MOUSEUP                 <-- possibly captured event (it may have fired _before_ the FOCUS event)
+               * [this element] CLICK                   <-- possibly captured event (it may have fired _before_ the FOCUS event)
+               */
+              setTimeout(() => {
+                // stop capturing possible out-of-order mouse events
+                capturing = false;
+
+                // trigger focus event
+                focusableElement.focus();
+
+                // re-dispatch captured mouse events in order
+                while (capturedEvents.length > 0) {
+                  var event = capturedEvents.pop();
+                  focusableElement.dispatchEvent(
+                    new MouseEvent(event.type, event)
+                  );
+                }
+              }, 0);
+            }
+          }
+        }
+
+        if (/apple/i.test(navigator.vendor)) {
+          window.addEventListener("mousedown", handler, { capture: true });
+          window.addEventListener("mouseup", captureEvent, { capture: true });
+          window.addEventListener("click", captureEvent, { capture: true });
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <h1>Click focus testing</h1>
+    <p>
+      This table shows how every interactive element responds to clicks focusing
+      on the element (or some delegated element). The tests run check for these
+      aspects:
+    </p>
+    <ul>
+      <li>The :focus selector matches the element or its delegate</li>
+      <li>The activeElement matches the element or its delegate</li>
+      <li>
+        The following events dispatch in order:
+        <ol>
+          <li><pre>mousedown</pre></li>
+          <li><pre>blur</pre></li>
+          <li><pre>focusout</pre></li>
+          <li><pre>focus</pre></li>
+          <li><pre>focusin</pre></li>
+          <li><pre>mouseup</pre></li>
+          <li><pre>click</pre></li>
+        </ol>
+      </li>
+    </ul>
+    <p>
+      To run a test, click into the "start here" input, then click the element
+      with the text "click me" unless otherwise noted. For test cases with only
+      a single element, click that element.
+    </p>
+    <table cellpadding="5" border="1">
+      <caption>
+        Tests for click focusability
+      </caption>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Expected Results</th>
+          <th>Element</th>
+          <th>Safari</th>
+          <th>Firefox</th>
+          <th>Chrome</th>
+          <th>Edge</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="colgroup" colspan="7">Focusable Elements</th>
+        </tr>
+        <tr data-test-case id="text_input">
+          <th scope="row">Text input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="text"
+              data-focus-target
+              data-click-target
+              value="click me"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="number_input">
+          <th scope="row">number input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="number"
+              data-focus-target
+              data-click-target
+              placeholder="click me"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="checkbox_input">
+          <th scope="row">checkbox input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="checkbox" data-focus-target data-click-target /><span
+              >click this checkbox (this text is not a label)</span
+            >
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="radio_input">
+          <th scope="row">radio input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="radio" data-focus-target data-click-target /><span
+              >click this radio button (this text is not a label)</span
+            >
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="radio_group_input">
+          <th scope="row">radio group</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="radio" name="group" />
+            <br />
+            <input
+              type="radio"
+              name="group"
+              data-focus-target
+              data-click-target
+            /><span>click this radio button (this text is not a label)</span>
+            <br />
+            <input type="radio" name="group" />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="color_input">
+          <th scope="row">color input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="color" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On Windows devices, the :focus selector does not match. Passes
+              tests on MacOS.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="date_input">
+          <th scope="row">date input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="date" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="datetime-local_input">
+          <th scope="row">datetime-local input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="datetime-local" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="email_input">
+          <th scope="row">email input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="email"
+              data-focus-target
+              data-click-target
+              value="click me"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="file_input">
+          <th scope="row">file input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="file" data-focus-target data-click-target />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Clicking on the generated button element does not make the input
+              match the :focus selector
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Clicking on the generated button element does not make the input
+              match the :focus selector
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Clicking on the generated button element does not make the input
+              match the :focus selector
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="image_input">
+          <th scope="row">image input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="image"
+              src="https://interactive-examples.mdn.mozilla.net/media/examples/login-button.png"
+              data-focus-target
+              data-click-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="month_input">
+          <th scope="row">month input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="month" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="password_input">
+          <th scope="row">password input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="password" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="button_input">
+          <th scope="row">button input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="button"
+              value="click me"
+              data-focus-target
+              data-click-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="range_input">
+          <th scope="row">range input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="range" data-focus-target data-click-target />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="reset_input">
+          <th scope="row">reset input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="reset"
+              value="click me"
+              data-focus-target
+              data-click-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="search_input">
+          <th scope="row">search input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="search" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="submit_input">
+          <th scope="row">submit input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input
+              type="submit"
+              value="click me"
+              data-focus-target
+              data-click-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tel_input">
+          <th scope="row">tel input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="tel" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="time_input">
+          <th scope="row">time input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="time" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="url_input">
+          <th scope="row">url input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="url" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="week_input">
+          <th scope="row">week input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="week" data-focus-target data-click-target />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              On MacOS, :focus selector does not match the &lt;input&gt;
+              <em>if the calendar picker button is clicked</em>. Passes test on
+              Windows.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="textarea">
+          <th scope="row">textarea</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <textarea data-focus-target data-click-target></textarea>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="select">
+          <th scope="row">select</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <select data-focus-target data-click-target>
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+            </select>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="button">
+          <th scope="row">button</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button
+              type="button"
+              data-click-target
+              data-focus-target
+              style="padding: 0"
+            >
+              Click me
+            </button>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="button_with_nested_elements">
+          <th scope="row">Button with nested elements</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="button" data-focus-target style="padding: 0">
+              <!-- including nested elements to ensure clicks on them bubble up and are handled at the button level -->
+              <span
+                data-click-target
+                style="padding: 0.5em; display: inline-block"
+                >click me</span
+              >
+            </button>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="reset_button">
+          <th scope="row">reset button</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="button" data-focus-target data-click-target>
+              click me
+            </button>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="submit_button">
+          <th scope="row">submit button</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="submit" data-focus-target data-click-target>
+              click me
+            </button>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="anchor_href">
+          <th scope="row">anchor with href</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <a href="#anchor_href" data-focus-target data-click-target
+              >click me</a
+            >
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The &lt;a&gt; element never becomes focused. No "focus" or
+              "focusin" events are dispatched, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="area_with_href">
+          <th scope="row">Area with href</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <img
+              src="https://html.spec.whatwg.org/images/sample-usemap.png"
+              usemap="#shapes"
+              alt="Four shapes are available: a red hollow box, a green circle, a blue triangle, and a yellow four-pointed star."
+            />
+            <map name="shapes">
+              <area shape="rect" coords="50,50,100,100" />
+              <!-- the hole in the red box -->
+              <area
+                shape="rect"
+                data-click-target
+                data-focus-target
+                coords="25,25,125,125"
+                href="#area_with_href"
+                alt="Red box."
+              />
+              <area
+                shape="circle"
+                coords="200,75,50"
+                href="#area_with_href"
+                alt="Green circle."
+              />
+              <area
+                shape="poly"
+                coords="325,25,262,125,388,125"
+                href="#area_with_href"
+                alt="Blue triangle."
+              />
+              <area
+                shape="poly"
+                coords="450,25,435,60,400,75,435,90,450,125,465,90,500,75,465,60"
+                href="#area_with_href"
+                alt="Yellow star."
+              />
+            </map>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute. The "focus" and "focusin" events are dispatched,
+              though.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute. A set of "blur" and "focusout" events are
+              dispatched on the &lt;area&gt; immediately after the "focusin"
+              event.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute. The "focus" and "focusin" events are dispatched,
+              though.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Focus goes to the body after clicking an anchor element with an
+              href attribute. The "focus" and "focusin" events are dispatched,
+              though.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="contenteditable">
+          <th scope="row">contenteditable attribute on div</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target data-focus-target contenteditable>
+              Click me
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tabindex_overrides_contenteditable_false">
+          <th scope="row">contenteditable="false" and tabindex="-1" on div</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div
+              data-click-target
+              data-focus-target
+              tabindex="-1"
+              contenteditable="false"
+            >
+              Click me
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tabindex">
+          <th scope="row">Tabindex</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target data-focus-target tabindex="-1">
+              Click me
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tabindex_empty">
+          <th scope="row">Tabindex (empty attribute)</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target tabindex>Click me</div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tabindex_non_numeric">
+          <th scope="row">Tabindex (non-numeric value)</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target tabindex="foo">Click me</div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="tabindex_js">
+          <th scope="row">Tabindex (non-numeric value set by Element API)</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target data-focus-target>Click me</div>
+            <script>
+              document.querySelector(
+                "#tabindex_js [data-click-target]"
+              ).tabIndex = null;
+            </script>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="details_with_summary">
+          <th scope="row">Details with summary</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <details>
+              <summary data-click-target data-focus-target>Click me</summary>
+              <p>other content</p>
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="audio">
+          <th scope="row">Audio</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <audio
+              controls
+              data-click-target
+              data-focus-target
+              src="https://sample-videos.com/audio/mp3/crowd-cheering.mp3"
+            ></audio>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of an &lt;audio&gt; element
+              or its controls.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of an &lt;audio&gt; element
+              or its controls. :focus styles do not apply to the &lt;audio&gt;
+              element <em>if the control elements are clicked</em>, but the
+              &lt;audio&gt; element still becomes the active element.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of an &lt;audio&gt; element
+              or its controls. :focus styles do not apply to the &lt;audio&gt;
+              element <em>if the control elements are clicked</em>, but the
+              &lt;audio&gt; element still becomes the active element.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="video_with_controls">
+          <th scope="row">Video with controls</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <video data-click-target data-focus-target controls>
+              <source
+                src="https://www.dropbox.com/s/df2d2gf1dvnr5uj/Sample_1280x720_mp4.mp4"
+                type="video/mp4"
+              />
+              <source
+                src="https://www.dropbox.com/s/s1rc65usypfacde/Sample_1280x720_webm.webm"
+                type="video/webm"
+              />
+            </video>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The &lt;video&gt; element never becomes focused. No "focus" or
+              "focusin" events are dispatched, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of a &lt;video&gt; element or
+              its controls.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of a &lt;video&gt; element's
+              controls. Mouse events do dispatch if some other area of the
+              &lt;video&gt; element is clicked.
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No mouse events ("mousedown", "mouseup", and "click") are
+              dispatched when clicking on any part of a &lt;video&gt; element's
+              controls. Mouse events do dispatch if some other area of the
+              &lt;video&gt; element is clicked.
+            </details>
+          </td>
+        </tr>
+
+        <tr>
+          <th scope="colgroup" colspan="7">
+            Unfocusable Elements (disabled, inert, unrendered, or invalid)
+          </th>
+        </tr>
+        <tr data-test-case id="text_input_disabled" data-no-mouse-events>
+          <th scope="row">Disabled input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="text" disabled data-click-target value="click me" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="text_input_disabled_fieldset"
+          data-no-mouse-events
+        >
+          <th scope="row">Disabled fieldset</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <fieldset disabled>
+              <input type="text" data-click-target value="click me" />
+            </fieldset>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="text_input_inert" data-no-mouse-events>
+          <th scope="row">Inert input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <input type="text" inert data-click-target value="click me" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="text_input_inert_tree" data-no-mouse-events>
+          <th scope="row">Inert tree</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div inert>
+              <input type="text" data-click-target value="click me" />
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="anchor_without_href">
+          <th scope="row">anchor without href</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <a data-click-target>click me</a>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="area_without_href">
+          <th scope="row">Area without href</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <img
+              src="https://html.spec.whatwg.org/images/sample-usemap.png"
+              usemap="#shapes2"
+              alt="Four shapes are available: a red hollow box, a green circle, a blue triangle, and a yellow four-pointed star."
+            />
+            <map name="shapes2">
+              <area shape="rect" coords="50,50,100,100" />
+              <!-- the hole in the red box -->
+              <area
+                shape="rect"
+                data-click-target
+                coords="25,25,125,125"
+                alt="Red box."
+              />
+              <area shape="circle" coords="200,75,50" alt="Green circle." />
+              <area
+                shape="poly"
+                coords="325,25,262,125,388,125"
+                alt="Blue triangle."
+              />
+              <area
+                shape="poly"
+                coords="450,25,435,60,400,75,435,90,450,125,465,90,500,75,465,60"
+                alt="Yellow star."
+              />
+            </map>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="contenteditable_false">
+          <th scope="row">contenteditable="false"</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div data-click-target contenteditable="false">Click me</div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="inert_overrides_contenteditable"
+          data-no-mouse-events
+        >
+          <th scope="row">Inert div with contenteditable attribute</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div inert>
+              <div data-click-target contenteditable>Click me</div>
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="inert_overrides_tabindex" data-no-mouse-events>
+          <th scope="row">Inert div with tabindex attribute</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div inert>
+              <div data-click-target tabindex="-1">Click me</div>
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="details_with_multiple_summary">
+          <th scope="row">
+            Details with multiple summary elements. Summary elements other than
+            the first should not be click focusable.
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <details open>
+              <summary>(first summary element)</summary>
+              <summary data-click-target>
+                Click me (second summary element)
+              </summary>
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="video">
+          <th scope="row">Video (no controls)</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <video
+              data-click-target
+              src="https://sample-videos.com/video123/mp4/240/big_buck_bunny_240p_1mb.mp4"
+            ></video>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="fail">
+            Fail
+            <details>
+              Video element is focusable but shouldn't be. It matches the :focus
+              selector, becomes the active element and dispatches "focus" and
+              "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+
+        <tr>
+          <th scope="colgroup" colspan="7">Labeled Elements</th>
+        </tr>
+        <tr>
+          <th scope="colgroup" colspan="7">Wrapping</th>
+        </tr>
+        <tr data-test-case id="input_wrapped_by_label">
+          <th scope="row">Label wrapping input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input type="text" data-redirected-focus-target />
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="input_wrapped_by_focusable_label">
+          <th scope="row">Focusable label wrapping input</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label tabindex="-1" data-focus-target>
+              <span data-click-target>Click me</span>
+              <input type="text" data-redirected-focus-target />
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="overspecified_label">
+          <th scope="row">
+            Label with "for" attribute wrapping input it targets
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="overspecified_label_target">
+              <span data-click-target>Click me</span>
+              <input
+                type="text"
+                id="overspecified_label_target"
+                data-redirected-focus-target
+              />
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="disabled_input_wrapped_by_label">
+          <th scope="row">Label wrapping disabled input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input disabled type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="inert_input_wrapped_by_label">
+          <th scope="row">Label wrapping inert input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input inert type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="invisible_input_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered input<br />(visibility: hidden;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="visibility: hidden" type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="unrendered_input_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered input<br />(content-visibility: hidden;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="content-visibility: hidden" type="text" />
+            </label>
+          </td>
+          <td>content-visibility is not supported in this browser</td>
+          <td>content-visibility is not supported in this browser</td>
+          <td class="partial">
+            Partial
+            <details>
+              No "focus" or "focusin" events are dispatched (correctly) but the
+              &lt;input&gt; becomes the active element and matches the :focus
+              selector (incorrectly).
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No "focus" or "focusin" events are dispatched (correctly) but the
+              &lt;input&gt; becomes the active element and matches the :focus
+              selector (incorrectly).
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="undisplayed_input_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered input<br />(display: none;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="display: none" type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_wrapping_non_labelable_element">
+          <th scope="row">Label wrapping focusable non-labelable element</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <div tabindex="0">Am I focused?</div>
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_wrapping_non_focusable_labelable_element">
+          <th scope="row">
+            Label wrapping non-focusable labelable element<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <progress max="100" value="70">70%</progress>
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_wrapping_focusable_labelable_element">
+          <th scope="row">
+            Label wrapping focusable labelable element (progress bar with
+            tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <progress
+                tabindex="-1"
+                max="100"
+                value="70"
+                data-redirected-focus-target
+              >
+                70%
+              </progress>
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_wrapping_non_focusable_labelable_element_meter"
+        >
+          <th scope="row">
+            Label wrapping non-focusable labelable element (meter bar)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <meter max="100" value="70">70%</meter>
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_wrapping_focusable_labelable_element_meter"
+        >
+          <th scope="row">
+            Label wrapping focusable labelable element (meter bar with
+            tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <meter
+                tabindex="-1"
+                max="100"
+                value="70"
+                data-redirected-focus-target
+              >
+                70%
+              </meter>
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_wrapping_non_focusable_labelable_element_output"
+        >
+          <th scope="row">
+            Label wrapping non-focusable labelable element (output)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <output>70%</output>
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_wrapping_focusable_labelable_element_output"
+        >
+          <th scope="row">
+            Label wrapping focusable labelable element (output with tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <output tabindex="-1" data-redirected-focus-target>70%</output>
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_with_targetless_for_attr">
+          <th scope="row">
+            Label with "for" attribute but no target wrapping input
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for>
+              <span data-click-target>Click me</span>
+              <input type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_targets_unwrapped_input">
+          <th scope="row">
+            Label with "for" attribute wrapping input that is not the target of
+            the "for" attribute
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="wrapping_label_targets_unwrapped_input_target">
+              <span data-click-target>Click me</span>
+              <input type="text" />
+            </label>
+            <input
+              type="text"
+              id="wrapping_label_targets_unwrapped_input_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+
+        <tr>
+          <th scope="colgroup" colspan="7">Targeting</th>
+        </tr>
+        <tr data-test-case id="label_targeting_non_focusable_labelable_element">
+          <th scope="row">
+            Label targeting non-focusable labelable element (progress bar)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="label_targeting_non_focusable_labelable_element_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <progress
+              id="label_targeting_non_focusable_labelable_element_target"
+              max="100"
+              value="70"
+            >
+              70%
+            </progress>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_targeting_focusable_labelable_element">
+          <th scope="row">
+            Label targeting focusable labelable element (progress bar with
+            tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="label_targeting_non_focusable_labelable_element_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <progress
+              id="label_targeting_non_focusable_labelable_element_target"
+              tabindex="-1"
+              max="100"
+              value="70"
+              data-redirected-focus-target
+            >
+              70%
+            </progress>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;progress&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;progress&gt; element, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;progress&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;progress&gt; element, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;progress&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;progress&gt; element, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;progress&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;progress&gt; element, it does not become the active
+              element, and it does not match the :focus selector.
+            </details>
+          </td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_targeting_non_focusable_labelable_element_meter"
+        >
+          <th scope="row">
+            Label targeting non-focusable labelable element (meter bar)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="label_targeting_non_focusable_labelable_element_meter_target"
+            >
+              <span data-click-target>Click me</span>
+            </label>
+            <meter
+              id="label_targeting_non_focusable_labelable_element_meter_target"
+              max="100"
+              value="70"
+            >
+              70%
+            </meter>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_targeting_focusable_labelable_element_meter"
+        >
+          <th scope="row">
+            Label targeting focusable labelable element (meter bar with
+            tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="label_targeting_non_focusable_labelable_element_meter_target"
+            >
+              <span data-click-target>Click me</span>
+            </label>
+            <meter
+              id="label_targeting_non_focusable_labelable_element_meter_target"
+              tabindex="-1"
+              max="100"
+              value="70"
+              data-redirected-focus-target
+            >
+              70%
+            </meter>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;meter&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;meter&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;meter&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;meter&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;meter&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;meter&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;meter&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;meter&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_targeting_non_focusable_labelable_element_output"
+        >
+          <th scope="row">
+            Label targeting non-focusable labelable element (output)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="label_targeting_non_focusable_labelable_element_output_target"
+            >
+              <span data-click-target>Click me</span>
+            </label>
+            <output
+              id="label_targeting_non_focusable_labelable_element_output_target"
+              >70%</output
+            >
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="label_targeting_focusable_labelable_element_output"
+        >
+          <th scope="row">
+            Label targeting focusable labelable element (output with
+            tabindex)<br />
+            <details>
+              <summary>Explanation</summary>
+              Elements that can be associated with a &lt;label&gt; element
+              include &lt;button&gt;, &lt;input&gt; (except for type="hidden"),
+              &lt;meter&gt;, &lt;output&gt;, &lt;progress&gt;, &lt;select&gt;
+              and &lt;textarea&gt;. Meters, outputs, and progress elements are
+              not natively focusable.
+            </details>
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="label_targeting_non_focusable_labelable_element_output_target"
+            >
+              <span data-click-target>Click me</span>
+            </label>
+            <output
+              id="label_targeting_non_focusable_labelable_element_output_target"
+              tabindex="-1"
+              data-redirected-focus-target
+              >70%</output
+            >
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;output&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;output&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;output&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;output&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;output&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;output&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              &lt;output&gt; element does not become focusable on click of its
+              label. No "focus", "focusin", or "click" events are dispatched on
+              the &lt;output&gt; element, it does not become the active element,
+              and it does not match the :focus selector.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="targeted_label">
+          <th scope="row">Label with "for" attribute</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="targeted_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              type="text"
+              id="targeted_label_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="multi_targeted_label">
+          <th scope="row">
+            Label with "for" attribute that matches multiple inputs
+          </th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="multi_targeted_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              type="text"
+              id="multi_targeted_label_target"
+              data-redirected-focus-target
+            />
+            <input type="text" id="multi_targeted_label_target" />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="multi_targeted_label_with_unfocusable_target">
+          <th scope="row">
+            Label with "for" attribute that matches multiple inputs, the first
+            of which is unfocusable
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="multi_targeted_label_with_unfocusable_target_other">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              type="text"
+              id="multi_targeted_label_with_unfocusable_target_other"
+              disabled
+            />
+            <input
+              type="text"
+              id="multi_targeted_label_with_unfocusable_target_other"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="disabled_input_targeted_by_label">
+          <th scope="row">Label targeting disabled input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <input disabled type="text" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="inert_input_targeted_by_label">
+          <th scope="row">Label targeting inert input</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <input inert type="text" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="invisible_input_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered input<br />(visibility: hidden;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <input style="visibility: hidden" type="text" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="unrendered_input_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered input<br />(content-visibility: hidden;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <input style="content-visibility: hidden" type="text" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="undisplayed_input_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered input<br />(display: none;)
+          </th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <input style="display: none" type="text" />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_targeting_non_form_element">
+          <th scope="row">Label targeting focusable non-labelable element</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+            </label>
+            <div tabindex="0">Am I focused?</div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_within_button_with_valid_target">
+          <th scope="row">Label within a button that has a valid target</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="button" data-focus-target>
+              <label for="label_within_button_with_valid_target_other">
+                <span data-click-target>Click me</span>
+              </label>
+            </button>
+            <input
+              type="text"
+              id="label_within_button_with_valid_target_other"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              The &lt;button&gt; element never dispatches "focus", "focusin",
+              "blur", or "focusout" events. The targeted element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="button_with_label">
+          <th scope="row">button within label that has valid target</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="button_with_label_target">
+              <button type="button" data-focus-target>
+                <span data-click-target>Click me</span>
+              </button>
+            </label>
+            <input
+              type="text"
+              id="button_with_label_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
+            <details>
+              &lt;label&gt; element does not redirect focus on click. No "focus"
+              or "focusin" events are dispatched on the &lt;input&gt; element,
+              it does not become the active element, and it does not match the
+              :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
+            <details>
+              &lt;label&gt; element does not redirect focus on click. No "focus"
+              or "focusin" events are dispatched on the &lt;input&gt; element,
+              it does not become the active element, and it does not match the
+              :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
+            <details>
+              &lt;label&gt; element does not redirect focus on click. No "focus"
+              or "focusin" events are dispatched on the &lt;input&gt; element,
+              it does not become the active element, and it does not match the
+              :focus selector.
+            </details>
+          </td>
+          <td class="fail">
+            Fail
+            <!-- TODO: check expected behavior across browsers and against spec, better describe actual behavior -->
+            <details>
+              &lt;label&gt; element does not redirect focus on click. No "focus"
+              or "focusin" events are dispatched on the &lt;input&gt; element,
+              it does not become the active element, and it does not match the
+              :focus selector.
+            </details>
+          </td>
+        </tr>
+        <tr data-test-case id="focusable_click_target_within_label">
+          <th scope="row">Focusable click target within label</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="focusable_click_target_within_label_target">
+              <div tabindex="-1" data-focus-target>
+                <span data-click-target>Click me</span>
+              </div>
+            </label>
+            <input
+              type="text"
+              id="focusable_click_target_within_label_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>Events are dispatched out of order.</details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_within_button_without_for_attr">
+          <th scope="row">Label without "for" attribute within a button</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="button" data-focus-target>
+              <label>
+                <span data-click-target>Click me</span>
+              </label>
+            </button>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Element does not become focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+
+        <tr>
+          <th scope="colgroup" colspan="7">Web Components</th>
+        </tr>
+        <tr data-test-case id="web_component_no_delegation">
+          <th scope="row">With unfocusable shadow element click target</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement0 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: false,
+                  });
+                  root.innerHTML = `
+                        <input id=shadow_dom_1>
+                        <span>Click me</span>
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-0", CustomElement0);
+            </script>
+            <web-component-0 data-click-target></web-component-0>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_no_delegation_click_focusable_shadow_el"
+        >
+          <th scope="row">With focusable shadow element click target</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement00 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: false,
+                  });
+                  root.innerHTML = `
+                      <input id=shadow_dom_1 data-focus-target placeholder="click me">
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-00", CustomElement00);
+            </script>
+            <web-component-00
+              data-click-target
+              data-focus-target=""
+            ></web-component-00>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_no_delegation_click_focusable_light_el"
+        >
+          <th scope="row">With focusable light element click target</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement000 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: false,
+                  });
+                  root.innerHTML = `
+                        <p>some shadow content</p>
+                        <slot></slot>
+                    `;
+                }
+              }
+
+              window.customElements.define(
+                "web-component-000",
+                CustomElement000
+              );
+            </script>
+            <web-component-000>
+              <input
+                data-click-target
+                placeholder="click me"
+                type="text"
+                data-focus-target
+              />
+            </web-component-000>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="web_component_form_associated">
+          <th scope="row">Labeled form associated</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement6 extends HTMLElement {
+                static formAssociated = true;
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: false,
+                  });
+                  root.innerHTML = `
+                  <span>some shadow content</span>
+                `;
+                }
+              }
+
+              window.customElements.define("web-component-6", CustomElement6);
+            </script>
+
+            <label for="web_component_form_associated_target" data-click-target
+              >Click me</label
+            >
+            <web-component-6
+              id="web_component_form_associated_target"
+              tabindex="-1"
+              data-redirected-focus-target
+            ></web-component-6>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr>
+          <th colspan="7">Delegates Focus</th>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_delegates_focus_click_focusable_shadow_el"
+        >
+          <th scope="row">With focusable shadow element</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement1 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                        <input id=shadow_dom_1>
+                        <input id=shadow_dom_2 data-focus-target placeholder="click me">
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-1", CustomElement1);
+            </script>
+            <web-component-1
+              data-focus-target
+              data-click-target
+            ></web-component-1>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="web_component_delegation_unfocusable_shadow_el">
+          <th scope="row">With unfocusable shadow element</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement5 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                        <span>Click me</span>
+                        <input type="text" inert>
+                        <input type="text" data-focus-target>
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-5", CustomElement5);
+            </script>
+            <web-component-5
+              data-focus-target
+              data-click-target
+            ></web-component-5>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_delegates_focus_no_focusable_shadow_el"
+        >
+          <th scope="row">Without focusable shadow element</th>
+          <td>
+            No
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement3 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                        <span>Click me</span>
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-3", CustomElement3);
+            </script>
+            <web-component-3 data-click-target></web-component-3>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_delegates_focus_click_unfocusable_shadow_el"
+        >
+          <th scope="row">With multiple focusable shadow elements</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement2 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                        <input id=shadow_dom_1 data-focus-target>
+                        <span>Click me</span>
+                        <input>
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-2", CustomElement2);
+            </script>
+            <web-component-2
+              data-click-target
+              data-focus-target
+            ></web-component-2>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="web_component_delegation_click_focusable_light_el"
+        >
+          <th scope="row">Focusable light element</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement4 extends HTMLElement {
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                        <p>some shadow content</p>
+                        <input>
+                        <slot></slot>
+                    `;
+                }
+              }
+
+              window.customElements.define("web-component-4", CustomElement4);
+            </script>
+            <web-component-4>
+              <input
+                data-click-target
+                placeholder="click me"
+                type="text"
+                data-focus-target
+              />
+            </web-component-4>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="web_component_form_associated_delegates_focus">
+          <th scope="row">Labeled form associated</th>
+          <td>
+            Yes
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <script>
+              class CustomElement7 extends HTMLElement {
+                static formAssociated = true;
+                constructor() {
+                  super();
+                  const root = this.attachShadow({
+                    mode: "open",
+                    delegatesFocus: true,
+                  });
+                  root.innerHTML = `
+                  <input type="text" data-focus-target>
+                `;
+                }
+              }
+
+              window.customElements.define("web-component-7", CustomElement7);
+            </script>
+
+            <label
+              for="web_component_form_associated_delegates_focus_target"
+              data-click-target
+              >Click me</label
+            >
+            <web-component-7
+              id="web_component_form_associated_delegates_focus_target"
+              data-redirected-focus-target
+            ></web-component-7>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="partial">
+            Partial
+            <details>Events dispatched out of order.</details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>Events dispatched out of order.</details>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <script>
+      const eventsToLog = [
+        "mousedown",
+        "blur",
+        "focusout",
+        "focus",
+        "focusin",
+        "mouseup",
+        "click",
+      ];
+
+      function copyEventData(event) {
+        const data = {};
+        for (const key in event) {
+          if (typeof event[key] !== "function") {
+            data[key] = event[key];
+          }
+        }
+        return data;
+      }
+
+      function logEvent(event) {
+        const element = event.currentTarget;
+        element.eventLog ??= [];
+        window.eventLog ??= [];
+        if (!event.target.matches("td, tr, th, table")) {
+          element.eventLog.push(copyEventData(event));
+        }
+      }
+
+      function isEventDataEqual(d1, d2) {
+        if (!d2) return false;
+        return Object.entries(d1).every(([k, v]) => d2[k] === v);
+      }
+
+      function check(event) {
+        const element = event.currentTarget;
+        const blurTarget = element.querySelector("[data-blur-target]");
+        const clickTarget = element.querySelector("[data-click-target]");
+        const focusTarget = element.querySelector("[data-focus-target]");
+        const redirectedFocusTarget = element.querySelector(
+          "[data-redirected-focus-target]"
+        );
+        const resultsElement = element.querySelector(".results");
+        const noMouseEvents = element.matches("[data-no-mouse-events]");
+
+        // Check the event log asynchronously so that all of the (synchronous) events are logged before checking.
+        setTimeout(() => {
+          // Wait one frame to ensure :focus styles are applied
+          window.requestAnimationFrame(() => {
+            console.debug({
+              elementEventLog: [...element.eventLog],
+            });
+            const expectedFocusTarget =
+              redirectedFocusTarget ?? focusTarget ?? document.body;
+            const actualFocusTarget =
+              document.querySelector(":focus") ?? document.body;
+            const expectedActiveElement =
+              redirectedFocusTarget ?? focusTarget ?? document.body;
+            const activeShadowElement =
+              focusTarget?.shadowRoot?.activeElement ?? null;
+            const expectedActiveShadowElement =
+              focusTarget?.shadowRoot?.querySelector("[data-focus-target]") ??
+              null;
+
+            const focusSelectorIsCorrect =
+              expectedFocusTarget === document.body
+                ? document.querySelector(":focus") == null
+                : expectedFocusTarget.matches(":focus");
+            const activeElementIsCorrect =
+              expectedActiveElement === document.activeElement;
+            const activeShadowElementIsCorrect =
+              expectedActiveShadowElement === activeShadowElement;
+
+            // build up the expected events
+            const expectedEventOrder = [
+              { type: "blur", target: blurTarget },
+              { type: "focusout", target: blurTarget },
+            ];
+
+            if (!noMouseEvents) {
+              expectedEventOrder.unshift({
+                type: "mousedown",
+                target: clickTarget,
+              });
+
+              if (focusTarget) {
+                expectedEventOrder.push({ type: "focus", target: focusTarget });
+                expectedEventOrder.push({
+                  type: "focusin",
+                  target: focusTarget,
+                });
+              }
+
+              expectedEventOrder.push({ type: "mouseup", target: clickTarget });
+              expectedEventOrder.push({ type: "click", target: clickTarget });
+
+              if (redirectedFocusTarget) {
+                if (focusTarget) {
+                  expectedEventOrder.push({
+                    type: "blur",
+                    target: focusTarget,
+                  });
+                  expectedEventOrder.push({
+                    type: "focusout",
+                    target: focusTarget,
+                  });
+                }
+                expectedEventOrder.push({
+                  type: "focus",
+                  target: redirectedFocusTarget,
+                });
+                expectedEventOrder.push({
+                  type: "focusin",
+                  target: redirectedFocusTarget,
+                });
+                expectedEventOrder.push({
+                  type: "click",
+                  target: redirectedFocusTarget,
+                });
+              }
+            }
+
+            // check the events
+            const eventsMatch = expectedEventOrder.every(
+              (expectedEventData, index) => {
+                const actualEventData = element.eventLog[index];
+                return isEventDataEqual(expectedEventData, actualEventData);
+              }
+            );
+
+            // build the expected vs actual table
+            const table = document.createElement("table");
+            table.cellPadding = 5;
+            table.border = 1;
+            table.innerHTML = `
+              <tr>
+                <td><!-- empty --></td>
+                <th>Expected</th>
+                <th>Actual</th>
+              </tr>
+              ${expectedEventOrder
+                .map(
+                  (expectedEvent, index) => `<tr class="${
+                    isEventDataEqual(expectedEvent, element.eventLog[index])
+                      ? "pass"
+                      : "fail"
+                  }">
+                ${
+                  index === 0
+                    ? `<th scope="row" rowspan="${expectedEventOrder.length}">Events</th>`
+                    : ""
+                }
+                <td>${expectedEvent.type}</td>
+                <td>${element.eventLog[index]?.type ?? "-"}</td>
+              </tr>`
+                )
+                .join("")}
+              <tr class="${
+                expectedActiveElement === document.activeElement
+                  ? "pass"
+                  : "fail"
+              }">
+                <th scope="row">Active Element</th>
+                <td>${expectedActiveElement.tagName}</td>
+                <td>${document.activeElement?.tagName ?? "-"}</td>
+              </tr>
+              ${
+                expectedActiveShadowElement
+                  ? `
+                <tr class="${
+                  expectedActiveShadowElement === activeShadowElement
+                    ? "pass"
+                    : "fail"
+                }">
+                  <th scope="row">Active Shadow Element</th>
+                  <td>${expectedActiveShadowElement.tagName}</td>
+                  <td>${activeShadowElement?.tagName ?? "-"}</td>
+                </tr>
+              `
+                  : ""
+              }
+              <tr class="${focusSelectorIsCorrect ? "pass" : "fail"}">
+                <th scope="row">:focus matches</th>
+                <td>${expectedFocusTarget.tagName}</td>
+                <td>${actualFocusTarget.tagName}</td>
+              </tr>
+            `;
+            resultsElement.replaceChildren(table);
+
+            // add the pass/partial/fail class
+            if (
+              eventsMatch &&
+              focusSelectorIsCorrect &&
+              activeElementIsCorrect &&
+              activeShadowElementIsCorrect
+            ) {
+              element.className = "pass";
+            } else if (
+              eventsMatch ||
+              focusSelectorIsCorrect ||
+              activeElementIsCorrect ||
+              (expectedActiveShadowElement != null &&
+                activeShadowElementIsCorrect)
+            ) {
+              element.className = "partial";
+            } else {
+              element.className = "fail";
+            }
+          });
+        }, 0);
+      }
+
+      const options = {
+        capture: true,
+        passive: true,
+      };
+      Array.from(document.querySelectorAll("[data-test-case]")).forEach(
+        (testCase) => {
+          eventsToLog.forEach((event) => {
+            testCase.addEventListener(event, logEvent, options);
+          });
+          // clicking in the "start here" input resets the event log
+          testCase.addEventListener(
+            "click",
+            (event) => {
+              if (event.target.matches("[data-blur-target]")) {
+                event.currentTarget.eventLog = [];
+              }
+            },
+            options
+          );
+          testCase.addEventListener(
+            "blur",
+            (event) => {
+              if (event.target.matches("[data-blur-target]")) {
+                check(event);
+              }
+            },
+            options
+          );
+        }
+      );
+    </script>
+  </body>
+</html>
