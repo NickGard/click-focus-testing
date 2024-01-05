@@ -3075,9 +3075,8 @@
               elementEventLog: [...element.eventLog],
             });
             const expectedFocusTarget =
-              redirectedFocusTarget ?? focusTarget ?? document.body;
-            const actualFocusTarget =
-              document.querySelector(":focus") ?? document.body;
+              redirectedFocusTarget ?? focusTarget ?? null;
+            const actualFocusTarget = document.querySelector(":focus");
             const expectedActiveElement =
               redirectedFocusTarget ?? focusTarget ?? document.body;
             const activeShadowElement =
@@ -3087,9 +3086,7 @@
               null;
 
             const focusSelectorIsCorrect =
-              expectedFocusTarget === document.body
-                ? document.querySelector(":focus") == null
-                : expectedFocusTarget.matches(":focus");
+              actualFocusTarget === expectedFocusTarget;
             const activeElementIsCorrect =
               expectedActiveElement === document.activeElement;
             const activeShadowElementIsCorrect =
@@ -3205,8 +3202,8 @@
               }
               <tr class="${focusSelectorIsCorrect ? "pass" : "fail"}">
                 <th scope="row">:focus matches</th>
-                <td>${expectedFocusTarget.tagName}</td>
-                <td>${actualFocusTarget.tagName}</td>
+                <td>${expectedFocusTarget?.tagName ?? "null"}</td>
+                <td>${actualFocusTarget?.tagName ?? "null"}</td>
               </tr>
             `;
             resultsElement.replaceChildren(table);
