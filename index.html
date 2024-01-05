@@ -59,204 +59,6 @@
         }
       }
     </style>
-    <script>
-      (function () {
-        var capturedEvents = [];
-        var capturing = false;
-
-        function captureEvent(e) {
-          if (capturing) {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            capturedEvents.unshift(e);
-          }
-        }
-
-        var formElements = ["button", "input", "select", "textarea"].join(", ");
-        var focusableNonFormElements = [
-          "a[href]",
-          "audio",
-          "video[controls]",
-          "[tabindex]", // tabindex value doesn't matter for click focusability
-          "details summary",
-          '[contenteditable]:not([contenteditable="false"])',
-        ].join(", ");
-        var focusableElements = [formElements, focusableNonFormElements].join(
-          ", "
-        );
-
-        /**
-         * Gets the target element, even if it is in a shadow DOM
-         */
-        function getEventTarget(event) {
-          return event.composedPath()[0] || event.target;
-        }
-
-        /**
-         * Labels delegate focus to form elements in two ways:
-         * 1. Via a "for" attribute (or "htmlFor" property on the Element API)
-         * 2. Via wrapping the element
-         *
-         * Note:
-         * If a "for" attribute exists, all wrapped form elements are ignored, _even if_
-         * the attribute is empty or does not reference a form element.
-         *
-         * Note:
-         * If multiple form elements are wrapped by the label or multiple form elements have
-         * the same id matching the "for" attribute, only the first (in DOM order) is considered
-         * the delegated element, _even if_ it is disabled, hidden, or inert.
-         */
-        function getLabelledElement(element) {
-          var forId = element.htmlFor;
-          var referencedFormEl;
-
-          try {
-            referencedFormEl = document.querySelector(
-              `#${forId}:is(${formElements})`
-            );
-          } catch (e) {}
-
-          return forId ? referencedFormEl : element.querySelector(formElements);
-        }
-
-        /**
-         * "being rendered" is a term of art in [WHATWG](https://html.spec.whatwg.org/multipage/rendering.html#being-rendered).
-         * An element is "being rendered" _unless_ it or an ancestor has:
-         * 1. display: none
-         * 2. content-visibility: hidden
-         * 3. visibility: hidden
-         *
-         * Note:
-         * There was some debate whether an element with "display: contents" meant that it was being rendered,
-         * but the issue was resolved in this (CSSWG thread](https://github.com/w3c/csswg-drafts/issues/2632)
-         */
-        function isBeingRendered(element) {
-          var el = element;
-          while (el) {
-            if (
-              el.style.display === "none" ||
-              el.style.contentVisibility === "hidden" ||
-              el.style.visibility === "hidden"
-            ) {
-              return false;
-            }
-            el = el.parentElement;
-          }
-          return true;
-        }
-
-        /**
-         * An element may be unfocusable due to:
-         * 1. Being disabled (usually via "disabled" attribute), but only if the element is a form element
-         * 2. Being contained by a fieldset that is disabled, but only if the element is a form element
-         * 3. The element or an ancestor is inert
-         * 4. The element or an ancestor is not "being rendered"
-         */
-        function isUnfocusable(element) {
-          var isDisabled =
-            element.matches(formElements) &&
-            (element.disabled || element.closest("fieldset:disabled")); // 1, 2
-          var isInert = element.closest("[inert]"); // 3
-          var isHidden = !isBeingRendered(element); // 4
-
-          return isDisabled || isInert || isHidden;
-        }
-
-        /**
-         * Elements in an open shadow DOM that delegates focus (created with
-         * Element.attachShadow({open: true, delegatesFocus: true})) will delegate focus to the first
-         * focusable element in the shadow DOM _unless_ the element itself is focusable. In that case,
-         * the original element retains focus.
-         */
-        function getDelegatedFocusElement(element) {
-          var el = element;
-          while (el) {
-            if (el.shadowRoot && el.shadowRoot.delegatesFocus) {
-              var delegatedFocusElement =
-                el.shadowRoot.querySelector(focusableElements);
-
-              return delegatedFocusElement &&
-                !isUnfocusable(delegatedFocusElement)
-                ? delegatedFocusElement
-                : null;
-            }
-            el = el.parentElement;
-          }
-          return null;
-        }
-
-        function getFocusableElement(e) {
-          var targetElement = getEventTarget(e);
-          var validTargetElements = ["label", focusableElements].join(", ");
-          var focusableElement = targetElement.closest(validTargetElements);
-
-          if (focusableElement?.tagName === "LABEL") {
-            // get the element that the label points to
-            var labelledElement = getLabelledElement(focusableElement);
-            if (labelledElement && !isUnfocusable(labelledElement)) {
-              focusableElement = labelledElement;
-            }
-          }
-
-          return focusableElement && !isUnfocusable(focusableElement)
-            ? focusableElement
-            : getDelegatedFocusElement(targetElement);
-        }
-
-        function handler(e) {
-          var focusableElement = getFocusableElement(e);
-
-          if (focusableElement) {
-            if (focusableElement === document.activeElement) {
-              // mousedown is happening on the currently focused element
-              // do not fire the 'focus' event in this case AND
-              // call preventDefault() to stop the browser from transferring
-              // focus to the body element
-              e.preventDefault();
-            } else {
-              // start capturing possible out-of-order mouse events
-              capturing = true;
-
-              /*
-               * enqueue the focus event _after_ the current batch of events, which
-               * includes any blur events but before the mouseup and click events.
-               * The correct order of events is:
-               *
-               * [this element] MOUSEDOWN               <-- this event
-               * [previously active element] BLUR
-               * [previously active element] FOCUSOUT
-               * [this element] FOCUS                   <-- forced event
-               * [this element] FOCUSIN                 <-- triggered by forced event
-               * [this element] MOUSEUP                 <-- possibly captured event (it may have fired _before_ the FOCUS event)
-               * [this element] CLICK                   <-- possibly captured event (it may have fired _before_ the FOCUS event)
-               */
-              setTimeout(() => {
-                // stop capturing possible out-of-order mouse events
-                capturing = false;
-
-                // trigger focus event
-                focusableElement.focus();
-
-                // re-dispatch captured mouse events in order
-                while (capturedEvents.length > 0) {
-                  var event = capturedEvents.pop();
-                  focusableElement.dispatchEvent(
-                    new MouseEvent(event.type, event)
-                  );
-                }
-              }, 0);
-            }
-          }
-        }
-
-        if (/apple/i.test(navigator.vendor)) {
-          window.addEventListener("mousedown", handler, { capture: true });
-          window.addEventListener("mouseup", captureEvent, { capture: true });
-          window.addEventListener("click", captureEvent, { capture: true });
-        }
-      })();
-    </script>
   </head>
   <body>
     <h1>Click focus testing</h1>
@@ -584,7 +386,7 @@
             <br /><br />
             <input
               type="image"
-              src="https://interactive-examples.mdn.mozilla.net/media/examples/login-button.png"
+              src="/sample.webp"
               data-focus-target
               data-click-target
             />
@@ -1274,7 +1076,7 @@
               controls
               data-click-target
               data-focus-target
-              src="https://sample-videos.com/audio/mp3/crowd-cheering.mp3"
+              src="/sample.mp3"
             ></audio>
           </td>
           <td class="fail">
@@ -1324,14 +1126,7 @@
             <input data-blur-target value="start here" />
             <br /><br />
             <video data-click-target data-focus-target controls>
-              <source
-                src="https://www.dropbox.com/s/df2d2gf1dvnr5uj/Sample_1280x720_mp4.mp4"
-                type="video/mp4"
-              />
-              <source
-                src="https://www.dropbox.com/s/s1rc65usypfacde/Sample_1280x720_webm.webm"
-                type="video/webm"
-              />
+              <source src="/sample.webm" type="video/webm" />
             </video>
           </td>
           <td class="fail">
@@ -1593,10 +1388,9 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <video
-              data-click-target
-              src="https://sample-videos.com/video123/mp4/240/big_buck_bunny_240p_1mb.mp4"
-            ></video>
+            <video data-click-target>
+              <source src="/sample.webm" type="video/webm" />
+            </video>
           </td>
           <td class="pass">Pass</td>
           <td class="fail">
