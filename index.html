@@ -5,6 +5,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
+      :root,
+      ::placeholder {
+        color: black;
+      }
       * {
         font-family: monospace;
       }
@@ -36,9 +40,14 @@
         color: #eee;
       }
 
+      [data-click-target] {
+        padding: 0.25em;
+        border: 2px solid #0000ff;
+        background-color: #d5d5ff;
+      }
+
       table {
         background-color: white;
-        color: black;
         border-collapse: collapse;
       }
 
@@ -84,9 +93,8 @@
       </li>
     </ul>
     <p>
-      To run a test, click into the "start here" input, then click the element
-      with the text "click me" unless otherwise noted. For test cases with only
-      a single element, click that element.
+      To run a test, click into the "start here" input, then click the blue
+      element (usually with the text "click me").
     </p>
     <table cellpadding="5" border="1">
       <caption>
@@ -155,9 +163,12 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <input type="checkbox" data-focus-target data-click-target /><span
-              >click this checkbox (this text is not a label)</span
-            >
+            <input
+              type="checkbox"
+              data-focus-target
+              data-click-target
+              checked
+            /><span>click this checkbox (this text is not a label)</span>
           </td>
           <td class="fail">
             Fail
@@ -179,9 +190,12 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <input type="radio" data-focus-target data-click-target /><span
-              >click this radio button (this text is not a label)</span
-            >
+            <input
+              type="radio"
+              data-focus-target
+              data-click-target
+              checked
+            /><span>click this radio button (this text is not a label)</span>
           </td>
           <td class="fail">
             Fail
@@ -210,6 +224,7 @@
               name="group"
               data-focus-target
               data-click-target
+              checked
             /><span>click this radio button (this text is not a label)</span>
             <br />
             <input type="radio" name="group" />
