@@ -1924,42 +1924,16 @@
               70%
             </progress>
           </td>
-          <td class="fail">
-            Fail
+          <td class="partial">
+            Partial
             <details>
-              &lt;progress&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;progress&gt; element, it does not become the active
-              element, and it does not match the :focus selector.
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
             </details>
           </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;progress&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;progress&gt; element, it does not become the active
-              element, and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;progress&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;progress&gt; element, it does not become the active
-              element, and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;progress&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;progress&gt; element, it does not become the active
-              element, and it does not match the :focus selector.
-            </details>
-          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
         </tr>
         <tr
           data-test-case
@@ -2037,42 +2011,16 @@
               70%
             </meter>
           </td>
-          <td class="fail">
-            Fail
+          <td class="partial">
+            Partial
             <details>
-              &lt;meter&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;meter&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
             </details>
           </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;meter&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;meter&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;meter&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;meter&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;meter&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;meter&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
         </tr>
         <tr
           data-test-case
@@ -2144,42 +2092,16 @@
               >70%</output
             >
           </td>
-          <td class="fail">
-            Fail
+          <td class="partial">
+            Partial
             <details>
-              &lt;output&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;output&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
             </details>
           </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;output&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;output&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;output&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;output&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
-          <td class="fail">
-            Fail
-            <details>
-              &lt;output&gt; element does not become focusable on click of its
-              label. No "focus", "focusin", or "click" events are dispatched on
-              the &lt;output&gt; element, it does not become the active element,
-              and it does not match the :focus selector.
-            </details>
-          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="targeted_label">
           <th scope="row">Label with "for" attribute</th>
@@ -2340,8 +2262,8 @@
             </label>
             <input style="content-visibility: hidden" type="text" />
           </td>
-          <td class="pass">Pass</td>
-          <td class="pass">Pass</td>
+          <td>content-visibility is not supported in this browser</td>
+          <td>content-visibility is not supported in this browser</td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
