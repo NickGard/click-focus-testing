@@ -53,18 +53,22 @@
 
       /* hide unsupported tests */
       @supports not (content-visibility: hidden) {
+        #unrendered_checkbox_wrapped_by_label,
+        #unrendered_checkbox_targeted_by_label,
         #unrendered_input_wrapped_by_label,
         #unrendered_input_targeted_by_label {
           position: relative;
         }
+        #unrendered_checkbox_wrapped_by_label:after,
+        #unrendered_checkbox_targeted_by_label:after,
         #unrendered_input_wrapped_by_label:after,
         #unrendered_input_targeted_by_label:after {
           content: "property not supported in this browser";
           position: absolute;
-          padding: 0.25em;
+          padding: 0.75em;
           background-color: red;
           color: white;
-          left: 0;
+          left: 50%;
         }
       }
     </style>
@@ -809,33 +813,40 @@
               >click me</a
             >
           </td>
-          <td class="fail">
-            Fail
+          <td class="partial">
+            Partial
             <details>
-              The &lt;a&gt; element never becomes focused. No "focus" or
-              "focusin" events are dispatched, it does not become the active
-              element, and it does not match the :focus selector.
+              Focus goes to the body after clicking an anchor element with an
+              href attribute. If only a mousedown event is dispatched on the
+              element (i.e. you do not release the mouse button) then the
+              element becomes focused
             </details>
           </td>
           <td class="partial">
             Partial
             <details>
               Focus goes to the body after clicking an anchor element with an
-              href attribute.
+              href attribute. If only a mousedown event is dispatched on the
+              element (i.e. you do not release the mouse button) then the
+              element becomes focused
             </details>
           </td>
           <td class="partial">
             Partial
             <details>
               Focus goes to the body after clicking an anchor element with an
-              href attribute.
+              href attribute. If only a mousedown event is dispatched on the
+              element (i.e. you do not release the mouse button) then the
+              element becomes focused
             </details>
           </td>
           <td class="partial">
             Partial
             <details>
               Focus goes to the body after clicking an anchor element with an
-              href attribute.
+              href attribute. If only a mousedown event is dispatched on the
+              element (i.e. you do not release the mouse button) then the
+              element becomes focused
             </details>
           </td>
         </tr>
@@ -1380,10 +1391,13 @@
           <th scope="colgroup" colspan="7">Labeled Elements</th>
         </tr>
         <tr>
-          <th scope="colgroup" colspan="7">Wrapping</th>
+          <th scope="colgroup" colspan="7">
+            Wrapping<br />(some tests are repeated with text inputs and
+            checkboxes to check Safari)
+          </th>
         </tr>
         <tr data-test-case id="input_wrapped_by_label">
-          <th scope="row">Label wrapping input</th>
+          <th scope="row">Label wrapping text input</th>
           <td>
             <details class="results"></details>
           </td>
@@ -1406,8 +1420,32 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="checkbox_wrapped_by_label">
+          <th scope="row">Label wrapping checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input type="checkbox" data-redirected-focus-target />
+            </label>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox does not recieve focus. No "focus" or "focusin" events
+              are dispatched.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="input_wrapped_by_focusable_label">
-          <th scope="row">Focusable label wrapping input</th>
+          <th scope="row">Focusable label wrapping text input</th>
           <td>
             <details class="results"></details>
           </td>
@@ -1430,30 +1468,24 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
-        <tr data-test-case id="overspecified_label">
-          <th scope="row">
-            Label with "for" attribute wrapping input it targets
-          </th>
+        <tr data-test-case id="checkbox_wrapped_by_focusable_label">
+          <th scope="row">Focusable label wrapping checkbox</th>
           <td>
             <details class="results"></details>
           </td>
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label for="overspecified_label_target">
+            <label tabindex="-1" data-focus-target>
               <span data-click-target>Click me</span>
-              <input
-                type="text"
-                id="overspecified_label_target"
-                data-redirected-focus-target
-              />
+              <input type="checkbox" data-redirected-focus-target />
             </label>
           </td>
-          <td class="partial">
-            Partial
+          <td class="fail">
+            Fail
             <details>
-              Events dispatched out of order. The focused element dispatches the
-              "click" event before dispatching "focus" and "focusin" events.
+              Checkbox does not recieve focus. No "focus" or "focusin" events
+              are dispatched.
             </details>
           </td>
           <td class="pass">Pass</td>
@@ -1461,7 +1493,7 @@
           <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="disabled_input_wrapped_by_label">
-          <th scope="row">Label wrapping disabled input</th>
+          <th scope="row">Label wrapping disabled text input</th>
           <td>
             <details class="results"></details>
           </td>
@@ -1478,8 +1510,26 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="disabled_checkbox_wrapped_by_label">
+          <th scope="row">Label wrapping disabled checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input disabled type="checkbox" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="inert_input_wrapped_by_label">
-          <th scope="row">Label wrapping inert input</th>
+          <th scope="row">Label wrapping inert text input</th>
           <td>
             <details class="results"></details>
           </td>
@@ -1496,9 +1546,27 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="inert_checkbox_wrapped_by_label">
+          <th scope="row">Label wrapping inert checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input inert type="checkbox" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="invisible_input_wrapped_by_label">
           <th scope="row">
-            Label wrapping unrendered input<br />(visibility: hidden;)
+            Label wrapping unrendered text input<br />(visibility: hidden;)
           </th>
           <td>
             <details class="results"></details>
@@ -1516,9 +1584,30 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="invisible_checkbox_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered checkbox<br />(visibility: hidden;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="visibility: hidden" type="checkbox" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="unrendered_input_wrapped_by_label">
           <th scope="row">
-            Label wrapping unrendered input<br />(content-visibility: hidden;)
+            Label wrapping unrendered text input<br />(content-visibility:
+            hidden;)
           </th>
           <td>
             <details class="results"></details>
@@ -1550,9 +1639,44 @@
             </details>
           </td>
         </tr>
+        <tr data-test-case id="unrendered_checkbox_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered checkbox<br />(content-visibility:
+            hidden;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="content-visibility: hidden" type="checkbox" />
+            </label>
+          </td>
+          <td>content-visibility is not supported in this browser</td>
+          <td>content-visibility is not supported in this browser</td>
+          <td class="partial">
+            Partial
+            <details>
+              No "focus" or "focusin" events are dispatched (correctly) but the
+              &lt;input&gt; becomes the active element and matches the :focus
+              selector (incorrectly).
+            </details>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              No "focus" or "focusin" events are dispatched (correctly) but the
+              &lt;input&gt; becomes the active element and matches the :focus
+              selector (incorrectly).
+            </details>
+          </td>
+        </tr>
         <tr data-test-case id="undisplayed_input_wrapped_by_label">
           <th scope="row">
-            Label wrapping unrendered input<br />(display: none;)
+            Label wrapping unrendered text input<br />(display: none;)
           </th>
           <td>
             <details class="results"></details>
@@ -1563,6 +1687,26 @@
             <label>
               <span data-click-target>Click me</span>
               <input style="display: none" type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="undisplayed_checkbox_wrapped_by_label">
+          <th scope="row">
+            Label wrapping unrendered checkbox<br />(display: none;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <span data-click-target>Click me</span>
+              <input style="display: none" type="checkbox" />
             </label>
           </td>
           <td class="pass">Pass</td>
@@ -1804,7 +1948,7 @@
         </tr>
         <tr data-test-case id="wrapping_label_with_targetless_for_attr">
           <th scope="row">
-            Label with "for" attribute but no target wrapping input
+            Label with "for" attribute but no target wrapping text input
           </th>
           <td>
             <details class="results"></details>
@@ -1822,10 +1966,33 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr
+          data-test-case
+          id="wrapping_checkbox_label_with_targetless_for_attr"
+        >
+          <th scope="row">
+            Label with "for" attribute but no target wrapping checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for>
+              <span data-click-target>Click me</span>
+              <input type="checkbox" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="wrapping_label_targets_unwrapped_input">
           <th scope="row">
-            Label with "for" attribute wrapping input that is not the target of
-            the "for" attribute
+            Label with "for" attribute wrapping text input that is not the
+            target of the "for" attribute
           </th>
           <td>
             <details class="results"></details>
@@ -1854,9 +2021,500 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
-
+        <tr
+          data-test-case
+          id="wrapping_checkbox_label_targets_unwrapped_checkbox"
+        >
+          <th scope="row">
+            Label with "for" attribute wrapping checkbox that is not the target
+            of the "for" attribute
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="wrapping_checkbox_label_targets_unwrapped_checkbox_target"
+            >
+              <span data-click-target>Click me</span>
+              <input type="text" />
+            </label>
+            <input
+              type="checkbox"
+              id="wrapping_checkbox_label_targets_unwrapped_checkbox_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr>
-          <th scope="colgroup" colspan="7">Targeting</th>
+          <th scope="colgroup" colspan="7">
+            Wrapping AND Targeting<br />(some tests are repeated with text
+            inputs and checkboxes to check Safari)
+          </th>
+        </tr>
+        <tr data-test-case id="overspecified_label">
+          <th scope="row">
+            Label with "for" attribute wrapping text input it targets
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="overspecified_label_target">
+              <span data-click-target>Click me</span>
+              <input
+                type="text"
+                id="overspecified_label_target"
+                data-redirected-focus-target
+              />
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. The focused element dispatches the
+              "click" event before dispatching "focus" and "focusin" events.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="overspecified_checkbox_label">
+          <th scope="row">
+            Label with "for" attribute wrapping checkbox it targets
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="overspecified_checkbox_label_target">
+              <span data-click-target>Click me</span>
+              <input
+                type="checkbox"
+                id="overspecified_checkbox_label_target"
+                data-redirected-focus-target
+              />
+            </label>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox does not recieve focus. No "focus" or "focusin" events
+              are dispatched.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targeting_label_within_targeting_label">
+          <th scope="row">
+            Label with valid text input target within label targeting other text
+            input
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="targeting_label_within_targeting_label_other_target">
+              <label for="targeting_label_within_targeting_label_target">
+                <span data-click-target>Click me</span>
+              </label>
+            </label>
+            <input
+              id="targeting_label_within_targeting_label_other_target"
+              type="text"
+            />
+            <input
+              id="targeting_label_within_targeting_label_target"
+              type="text"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targeting_label_within_targeting_label_checkbox">
+          <th scope="row">
+            Label with valid checkbox target within label targeting other
+            checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="targeting_label_within_targeting_label_checkbox_other_target"
+            >
+              <label
+                for="targeting_label_within_targeting_label_checkbox_target"
+              >
+                <span data-click-target>Click me</span>
+              </label>
+            </label>
+            <input
+              id="targeting_label_within_targeting_label_checkbox_other_target"
+              type="checkbox"
+            />
+            <input
+              id="targeting_label_within_targeting_label_checkbox_target"
+              type="checkbox"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Element does not become focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_within_targeting_label">
+          <th scope="row">
+            Label with valid text input target within label targeting other text
+            input
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="wrapping_label_within_targeting_label_other_target">
+              <label>
+                <span data-click-target>Click me</span>
+                <input type="text" data-redirected-focus-target />
+              </label>
+            </label>
+            <input
+              id="wrapping_label_within_targeting_label_other_target"
+              type="text"
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_within_targeting_label_checkbox">
+          <th scope="row">
+            Label with valid checkbox target within label targeting other
+            checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="wrapping_label_within_targeting_label_checkbox_other_target"
+            >
+              <label>
+                <span data-click-target>Click me</span>
+                <input type="checkbox" data-redirected-focus-target />
+              </label>
+            </label>
+            <input
+              id="wrapping_label_within_targeting_label_checkbox_other_target"
+              type="checkbox"
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Element does not become focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targeting_label_within_wrapping_label">
+          <th scope="row">
+            Label with valid text input target within label targeting other text
+            input
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label for="targeting_label_within_wrapping_label_target">
+                <span data-click-target>Click me</span>
+              </label>
+              <input type="text" />
+            </label>
+            <input
+              id="targeting_label_within_wrapping_label_target"
+              type="text"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targeting_label_within_wrapping_label_checkbox">
+          <th scope="row">
+            Label with valid checkbox target within label targeting other
+            checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label
+                for="targeting_label_within_wrapping_label_checkbox_target"
+              >
+                <span data-click-target>Click me</span>
+              </label>
+              <input type="checkbox" />
+            </label>
+            <input
+              id="targeting_label_within_wrapping_label_checkbox_target"
+              type="checkbox"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Element does not become focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_within_wrapping_label">
+          <th scope="row">
+            Label with valid text input target within label targeting other text
+            input
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label>
+                <span data-click-target>Click me</span>
+                <input type="text" data-redirected-focus-target />
+              </label>
+              <input type="text" />
+            </label>
+          </td>
+          <td class="partial">
+            Partial
+            <details>
+              Events dispatched out of order. "click" event is dispatched before
+              "focus" and "focusin" on the focused element.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="wrapping_label_within_wrapping_label_checkbox">
+          <th scope="row">
+            Label with valid checkbox target within label targeting other
+            checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label>
+                <span data-click-target>Click me</span>
+                <input type="checkbox" data-redirected-focus-target />
+              </label>
+              <input type="checkbox" />
+            </label>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Element does not become focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targetless_label_within_targeting_label">
+          <th scope="row">
+            Label without wrapped or targeted element within label with valid
+            text input target
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label>
+                <span data-click-target>Click me</span>
+              </label>
+              <input type="text" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="targetless_label_within_targeting_label_checkbox"
+        >
+          <th scope="row">
+            Label without wrapped or targeted element within label with valid
+            checkbox target
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label>
+              <label>
+                <span data-click-target>Click me</span>
+              </label>
+              <input type="checkbox" />
+            </label>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="targetless_label_within_targeting_label">
+          <th scope="row">
+            Label without wrapped or targeted element within label with text
+            input descendant
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="targetless_label_within_targeting_label_target">
+              <label>
+                <span data-click-target>Click me</span>
+              </label>
+            </label>
+            <input
+              id="targetless_label_within_targeting_label_target"
+              type="text"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr
+          data-test-case
+          id="targetless_label_within_targeting_label_checkbox"
+        >
+          <th scope="row">
+            Label without wrapped or targeted element within label with checkbox
+            descendant
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="targetless_label_within_targeting_label_checkbox_target"
+            >
+              <label>
+                <span data-click-target>Click me</span>
+              </label>
+            </label>
+            <input
+              id="targetless_label_within_targeting_label_checkbox_target"
+              type="checkbox"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr>
+          <th scope="colgroup" colspan="7">
+            Targeting<br />(some tests are repeated with text inputs and
+            checkboxes to check Safari)
+          </th>
         </tr>
         <tr data-test-case id="label_targeting_non_focusable_labelable_element">
           <th scope="row">
@@ -2104,7 +2762,7 @@
           <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="targeted_label">
-          <th scope="row">Label with "for" attribute</th>
+          <th scope="row">Label with "for" attribute targeting text input</th>
           <td>
             <details class="results"></details>
           </td>
@@ -2131,9 +2789,37 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="targeted_checkbox_label">
+          <th scope="row">Label with "for" attribute targeting checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="targeted_checkbox_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              type="checkbox"
+              id="targeted_checkbox_label_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="multi_targeted_label">
           <th scope="row">
-            Label with "for" attribute that matches multiple inputs
+            Label with "for" attribute that matches multiple text inputs
           </th>
           <td>
             <details class="results"></details>
@@ -2162,10 +2848,41 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="multi_targeted_label_checkbox">
+          <th scope="row">
+            Label with "for" attribute that matches multiple checkboxes
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="multi_targeted_label_checkbox_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              type="checkbox"
+              id="multi_targeted_label_checkbox_target"
+              data-redirected-focus-target
+            />
+            <input type="checkbox" id="multi_targeted_label_checkbox_target" />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="multi_targeted_label_with_unfocusable_target">
           <th scope="row">
-            Label with "for" attribute that matches multiple inputs, the first
-            of which is unfocusable
+            Label with "for" attribute that matches multiple text inputs, the
+            first of which is unfocusable
           </th>
           <td>
             <details class="results"></details>
@@ -2191,18 +2908,78 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
-        <tr data-test-case id="disabled_input_targeted_by_label">
-          <th scope="row">Label targeting disabled input</th>
+        <tr
+          data-test-case
+          id="multi_targeted_checkbox_label_with_unfocusable_target"
+        >
+          <th scope="row">
+            Label with "for" attribute that matches multiple checkboxes, the
+            first of which is unfocusable
+          </th>
           <td>
             <details class="results"></details>
           </td>
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label
+              for="multi_targeted_checkbox_label_with_unfocusable_target_other"
+            >
               <span data-click-target>Click me</span>
             </label>
-            <input disabled type="text" />
+            <input
+              type="checkbox"
+              id="multi_targeted_checkbox_label_with_unfocusable_target_other"
+              disabled
+            />
+            <input
+              type="checkbox"
+              id="multi_targeted_checkbox_label_with_unfocusable_target_other"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="disabled_input_targeted_by_label">
+          <th scope="row">Label targeting disabled text input</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="disabled_input_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="disabled_input_targeted_by_label_target"
+              disabled
+              type="text"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="disabled_checkbox_targeted_by_label">
+          <th scope="row">Label targeting disabled checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="disabled_checkbox_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="disabled_checkbox_targeted_by_label_target"
+              disabled
+              type="checkbox"
+            />
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2210,17 +2987,43 @@
           <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="inert_input_targeted_by_label">
-          <th scope="row">Label targeting inert input</th>
+          <th scope="row">Label targeting inert text input</th>
           <td>
             <details class="results"></details>
           </td>
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label for="inert_input_targeted_by_label_target">
               <span data-click-target>Click me</span>
             </label>
-            <input inert type="text" />
+            <input
+              id="inert_input_targeted_by_label_target"
+              inert
+              type="text"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="inert_checkbox_targeted_by_label">
+          <th scope="row">Label targeting inert checkbox</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="inert_checkbox_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="inert_checkbox_targeted_by_label_target"
+              inert
+              type="checkbox"
+            />
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2229,7 +3032,7 @@
         </tr>
         <tr data-test-case id="invisible_input_targeted_by_label">
           <th scope="row">
-            Label targeting unrendered input<br />(visibility: hidden;)
+            Label targeting unrendered text input<br />(visibility: hidden;)
           </th>
           <td>
             <details class="results"></details>
@@ -2237,10 +3040,38 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label for="invisible_input_targeted_by_label_target">
               <span data-click-target>Click me</span>
             </label>
-            <input style="visibility: hidden" type="text" />
+            <input
+              id="invisible_input_targeted_by_label_target"
+              style="visibility: hidden"
+              type="text"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="invisible_checkbox_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered checkbox<br />(visibility: hidden;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="invisible_checkbox_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="invisible_checkbox_targeted_by_label_target"
+              style="visibility: hidden"
+              type="checkbox"
+            />
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2249,7 +3080,8 @@
         </tr>
         <tr data-test-case id="unrendered_input_targeted_by_label">
           <th scope="row">
-            Label targeting unrendered input<br />(content-visibility: hidden;)
+            Label targeting unrendered text input<br />(content-visibility:
+            hidden;)
           </th>
           <td>
             <details class="results"></details>
@@ -2257,10 +3089,39 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label for="unrendered_input_targeted_by_label_target">
               <span data-click-target>Click me</span>
             </label>
-            <input style="content-visibility: hidden" type="text" />
+            <input
+              id="unrendered_input_targeted_by_label_target"
+              style="content-visibility: hidden"
+              type="text"
+            />
+          </td>
+          <td>content-visibility is not supported in this browser</td>
+          <td>content-visibility is not supported in this browser</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="unrendered_checkbox_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered checkbox<br />(content-visibility:
+            hidden;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="unrendered_checkbox_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="unrendered_checkbox_targeted_by_label_target"
+              style="content-visibility: hidden"
+              type="checkbox"
+            />
           </td>
           <td>content-visibility is not supported in this browser</td>
           <td>content-visibility is not supported in this browser</td>
@@ -2269,7 +3130,7 @@
         </tr>
         <tr data-test-case id="undisplayed_input_targeted_by_label">
           <th scope="row">
-            Label targeting unrendered input<br />(display: none;)
+            Label targeting unrendered text input<br />(display: none;)
           </th>
           <td>
             <details class="results"></details>
@@ -2277,10 +3138,38 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label for="undisplayed_input_targeted_by_label_target">
               <span data-click-target>Click me</span>
             </label>
-            <input style="display: none" type="text" />
+            <input
+              id="undisplayed_input_targeted_by_label_target"
+              style="display: none"
+              type="text"
+            />
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="undisplayed_checkbox_targeted_by_label">
+          <th scope="row">
+            Label targeting unrendered checkbox<br />(display: none;)
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="undisplayed_checkbox_targeted_by_label_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <input
+              id="undisplayed_checkbox_targeted_by_label_target"
+              style="display: none"
+              type="checkbox"
+            />
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2295,10 +3184,13 @@
           <td>
             <input data-blur-target value="start here" />
             <br /><br />
-            <label>
+            <label for="label_targeting_non_form_element_target">
               <span data-click-target>Click me</span>
             </label>
-            <div tabindex="0">Am I focused?</div>
+            <br />
+            <div id="label_targeting_non_form_element_target" tabindex="0">
+              Am I focused?
+            </div>
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2306,7 +3198,9 @@
           <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="label_within_button_with_valid_target">
-          <th scope="row">Label within a button that has a valid target</th>
+          <th scope="row">
+            Label within a button that has a valid text input target
+          </th>
           <td>
             <details class="results"></details>
           </td>
@@ -2336,8 +3230,42 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="checkbox_label_within_button_with_valid_target">
+          <th scope="row">
+            Label within a button that has a valid checkbox target
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <button type="button" data-focus-target>
+              <label for="checkbox_label_within_button_with_valid_target_other">
+                <span data-click-target>Click me</span>
+              </label>
+            </button>
+            <input
+              type="checkbox"
+              id="checkbox_label_within_button_with_valid_target_other"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="button_with_label">
-          <th scope="row">button within label that has valid target</th>
+          <th scope="row">
+            button within label that has valid text input target
+          </th>
           <td>
             <details class="results"></details>
           </td>
@@ -2351,13 +3279,49 @@
             </label>
             <input type="text" id="button_with_label_target" />
           </td>
+          <td class="fail">
+            Fail
+            <details>
+              Button is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
+          </td>
           <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="button_with_checkbox_label">
+          <th scope="row">
+            button within label that has valid checkbox target
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="button_with_checkbox_label_target">
+              <button type="button" data-focus-target>
+                <span data-click-target>Click me</span>
+              </button>
+            </label>
+            <input type="checkbox" id="button_with_checkbox_label_target" />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Button is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
+          </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
         <tr data-test-case id="focusable_click_target_within_label">
-          <th scope="row">Focusable click target within label</th>
+          <th scope="row">
+            Focusable click target within label that targets text input
+          </th>
           <td>
             <details class="results"></details>
           </td>
@@ -2378,6 +3342,38 @@
           <td class="partial">
             Partial
             <details>Events are dispatched out of order.</details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="focusable_click_target_within_checkbox_label">
+          <th scope="row">
+            Focusable click target within label that targets checkbox
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="focusable_click_target_within_checkbox_label_target">
+              <div tabindex="-1" data-focus-target>
+                <span data-click-target>Click me</span>
+              </div>
+            </label>
+            <input
+              type="checkbox"
+              id="focusable_click_target_within_checkbox_label_target"
+              data-redirected-focus-target
+            />
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              Checkbox is not focused. No "focus" or "focusin" events are
+              dispatched.
+            </details>
           </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -2430,8 +3426,8 @@
                     delegatesFocus: false,
                   });
                   root.innerHTML = `
-                        <input id=shadow_dom_1>
-                        <span>Click me</span>
+                      <input id=shadow_dom_1>
+                      <span>Click me</span>
                     `;
                 }
               }
@@ -2465,6 +3461,7 @@
                     delegatesFocus: false,
                   });
                   root.innerHTML = `
+                      <style>::placeholder { color: black; }</style>
                       <input id=shadow_dom_1 data-focus-target placeholder="click me">
                     `;
                 }
@@ -2502,8 +3499,8 @@
                     delegatesFocus: false,
                   });
                   root.innerHTML = `
-                        <p>some shadow content</p>
-                        <slot></slot>
+                      <p>some shadow content</p>
+                      <slot></slot>
                     `;
                 }
               }
@@ -2545,8 +3542,8 @@
                     delegatesFocus: false,
                   });
                   root.innerHTML = `
-                  <span>some shadow content</span>
-                `;
+                      <span>some shadow content</span>
+                    `;
                 }
               }
 
@@ -2558,7 +3555,6 @@
             >
             <web-component-6
               id="web_component_form_associated_target"
-              tabindex="-1"
               data-redirected-focus-target
             ></web-component-6>
           </td>
@@ -2596,8 +3592,9 @@
                     delegatesFocus: true,
                   });
                   root.innerHTML = `
-                        <input id=shadow_dom_1>
-                        <input id=shadow_dom_2 data-focus-target placeholder="click me">
+                      <style>::placeholder { color: black; }</style>
+                      <input id=shadow_dom_1>
+                      <input id=shadow_dom_2 data-focus-target placeholder="click me">
                     `;
                 }
               }
@@ -2631,9 +3628,9 @@
                     delegatesFocus: true,
                   });
                   root.innerHTML = `
-                        <span>Click me</span>
-                        <input type="text" inert>
-                        <input type="text" data-focus-target>
+                      <span>Click me</span>
+                      <input type="text" inert>
+                      <input type="text" data-focus-target>
                     `;
                 }
               }
@@ -2704,9 +3701,9 @@
                     delegatesFocus: true,
                   });
                   root.innerHTML = `
-                        <input id=shadow_dom_1 data-focus-target>
-                        <span>Click me</span>
-                        <input>
+                      <input id=shadow_dom_1 data-focus-target>
+                      <span>Click me</span>
+                      <input>
                     `;
                 }
               }
@@ -2743,9 +3740,9 @@
                     delegatesFocus: true,
                   });
                   root.innerHTML = `
-                        <p>some shadow content</p>
-                        <input>
-                        <slot></slot>
+                      <p>some shadow content</p>
+                      <input>
+                      <slot></slot>
                     `;
                 }
               }
@@ -2784,8 +3781,8 @@
                     delegatesFocus: true,
                   });
                   root.innerHTML = `
-                  <input type="text" data-focus-target>
-                `;
+                      <input type="text" data-focus-target>
+                    `;
                 }
               }
 
