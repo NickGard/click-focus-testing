@@ -1154,6 +1154,59 @@
             </details>
           </td>
         </tr>
+        <tr data-test-case id="text_input_overridden_visibility">
+          <th scope="row">Visible input within invisible div</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div style="visibility: hidden">
+              <input
+                data-focus-target
+                data-click-target
+                style="visibility: visible"
+                type="text"
+                placeholder="Click me"
+              />
+            </div>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="text_checkbox_overridden_visibility">
+          <th scope="row">Visible checkbox within invisible div</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div style="visibility: hidden">
+              <input
+                data-focus-target
+                data-click-target
+                style="visibility: visible"
+                type="checkbox"
+                checked
+              />
+            </div>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
 
         <tr>
           <th scope="colgroup" colspan="7">
@@ -1584,6 +1637,35 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr data-test-case id="label_wrapping_text_input_overridden_visibility">
+          <th scope="row">label wrapping visible input within invisible div</th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div style="visibility: hidden">
+              <label>
+                <span style="visibility: visible" data-click-target
+                  >Click me</span
+                >
+                <input
+                  data-redirected-focus-target
+                  style="visibility: visible"
+                  type="text"
+                />
+              </label>
+            </div>
+          </td>
+          <td class="partial">
+            Partial
+            <details>Events dispatched out of order.</details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="invisible_checkbox_wrapped_by_label">
           <th scope="row">
             Label wrapping unrendered checkbox<br />(visibility: hidden;)
@@ -1600,6 +1682,41 @@
             </label>
           </td>
           <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_wrapping_checkbox_overridden_visibility">
+          <th scope="row">
+            label wrapping visible checkbox within invisible div
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <div style="visibility: hidden">
+              <label>
+                <span style="visibility: visible" data-click-target
+                  >Click me</span
+                >
+                <input
+                  data-redirected-focus-target
+                  style="visibility: visible"
+                  type="checkbox"
+                />
+              </label>
+            </div>
+          </td>
+          <td class="fail">
+            Fail
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
@@ -3054,6 +3171,41 @@
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
         </tr>
+        <tr
+          data-test-case
+          id="label_targeting_text_input_overridden_visibility"
+        >
+          <th scope="row">
+            label targeting visible input within invisible div
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label
+              for="label_targeting_text_input_overridden_visibility_target"
+            >
+              <span data-click-target>Click me</span>
+            </label>
+            <div style="visibility: hidden">
+              <input
+                id="label_targeting_text_input_overridden_visibility_target"
+                data-redirected-focus-target
+                style="visibility: visible"
+                type="text"
+              />
+            </div>
+          </td>
+          <td class="partial">
+            Partial
+            <details>Events dispatched out of order.</details>
+          </td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
         <tr data-test-case id="invisible_checkbox_targeted_by_label">
           <th scope="row">
             Label targeting unrendered checkbox<br />(visibility: hidden;)
@@ -3074,6 +3226,41 @@
             />
           </td>
           <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+          <td class="pass">Pass</td>
+        </tr>
+        <tr data-test-case id="label_targeting_checkbox_overridden_visibility">
+          <th scope="row">
+            label targeting visible checkbox within invisible div
+          </th>
+          <td>
+            <details class="results"></details>
+          </td>
+          <td>
+            <input data-blur-target value="start here" />
+            <br /><br />
+            <label for="label_targeting_checkbox_overridden_visibility_target">
+              <span data-click-target>Click me</span>
+            </label>
+            <div style="visibility: hidden">
+              <input
+                id="label_targeting_checkbox_overridden_visibility_target"
+                data-redirected-focus-target
+                style="visibility: visible"
+                type="checkbox"
+              />
+            </div>
+          </td>
+          <td class="fail">
+            Fail
+
+            <details>
+              The element never becomes focused. No "focus" or "focusin" events
+              are dispatched, it does not become the active element, and it does
+              not match the :focus selector.
+            </details>
+          </td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
           <td class="pass">Pass</td>
